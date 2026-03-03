@@ -32,14 +32,27 @@ export interface VaultTool {
 
 export interface PluginSettings {
   llm: {
+    provider: string;
     apiKey: string;
-    endpoint: string;
     model: string;
+    customEndpoint: string;
+    customModel: string;
   };
   feishu: {
     enabled: boolean;
     appId: string;
     appSecret: string;
+  };
+  telegram: {
+    enabled: boolean;
+    botToken: string;
+    allowedUserIds: string;
+  };
+  imessage: {
+    enabled: boolean;
+    serverUrl: string;
+    password: string;
+    allowedAddresses: string;
   };
   agent: {
     mode: 'readonly' | 'full';

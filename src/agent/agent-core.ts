@@ -2,6 +2,7 @@ import type { ChatMessage, AgentEvent } from '../types';
 import type { PluginSettings } from '../types';
 import { ToolRegistry, OpenAIToolDef } from './tool-registry';
 import { buildSystemPrompt } from './prompt';
+import { getProvider } from '../settings/providers';
 
 interface LLMResponseMessage {
   role: 'assistant';
@@ -124,11 +125,27 @@ export class AgentCore {
     yield { type: 'error', content: 'Maximum tool rounds reached. Please try a simpler query.' };
   }
 
+  private getEndpoint(): string {
+    if (this.settings.llm.provider === 'custom') {
+      return this.settings.llm.customEndpoint;
+    }
+    return getProvider(this.settings.llm.provider)?.endpoint ?? '';
+  }
+
+  private getModel(): string {
+    if (this.settings.llm.provider === 'custom') {
+      return this.settings.llm.customModel;
+    }
+    return this.settings.llm.model;
+  }
+
   private async callLLM(
     messages: Array<Record<string, unknown>>,
     tools: OpenAIToolDef[]
   ): Promise<{ message: LLMResponseMessage; streamedContent: string }> {
-    const { apiKey, endpoint, model } = this.settings.llm;
+    const apiKey = this.settings.llm.apiKey;
+    const endpoint = this.getEndpoint();
+    const model = this.getModel();
 
     if (!apiKey) {
       throw new Error('API key is not configured. Please set it in settings.');

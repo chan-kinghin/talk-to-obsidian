@@ -1,4 +1,4 @@
-import { Platform, Plugin, WorkspaceLeaf } from 'obsidian';
+import { Plugin, WorkspaceLeaf } from 'obsidian';
 import { PluginSettings, SearchResult } from './types';
 import { DEFAULT_SETTINGS } from './settings/settings';
 import { VaultChatSettingTab } from './settings/settings-tab';
@@ -18,20 +18,26 @@ import { createCreateNoteTool } from './agent/tools/create-note';
 import { createUpdateNoteTool } from './agent/tools/update-note';
 import { createAppendNoteTool } from './agent/tools/append-note';
 import { StatusIndicator } from './utils/status';
-import type { FeishuBot } from './feishu/feishu-bot';
-import type { FeishuConnectionStatus } from './feishu/feishu-bot';
+import { ChannelRegistry } from './channels/channel-registry';
+import { ALL_CHANNELS } from './channels/all-channels';
+import type { ConnectionStatus } from './channels/types';
 
 export default class VaultChatPlugin extends Plugin {
   settings!: PluginSettings;
+  channelRegistry: ChannelRegistry = new ChannelRegistry();
   private ftsIndex!: FTSIndex;
   private indexer!: VaultIndexer;
   private agentCore: AgentCore | null = null;
   private toolRegistry: ToolRegistry | null = null;
-  private feishuBot: FeishuBot | null = null;
   private llmStatus: StatusIndicator = new StatusIndicator();
 
   async onload(): Promise<void> {
     await this.loadSettings();
+
+    // Register all messaging channels
+    for (const channel of ALL_CHANNELS) {
+      this.channelRegistry.registerChannel(channel);
+    }
 
     // Initialize FTS index
     this.ftsIndex = new FTSIndex();
@@ -69,17 +75,17 @@ export default class VaultChatPlugin extends Plugin {
         this.registerEvent(ref);
       }
 
-      // Initialize Feishu bot (desktop only)
-      await this.initFeishu();
+      // Initialize messaging channels (desktop only)
+      if (this.agentCore) {
+        const vaultName = this.app.vault.getName();
+        await this.channelRegistry.initAll(this.agentCore, this.settings, vaultName);
+      }
     });
   }
 
   async onunload(): Promise<void> {
-    // Disconnect Feishu bot
-    if (this.feishuBot) {
-      await this.feishuBot.disconnect();
-      this.feishuBot = null;
-    }
+    // Disconnect all messaging channels
+    await this.channelRegistry.disconnectAll();
 
     // Clean up status indicator
     this.llmStatus.destroy();
@@ -90,9 +96,27 @@ export default class VaultChatPlugin extends Plugin {
 
   async loadSettings(): Promise<void> {
     const saved = (await this.loadData()) ?? {};
+
+    // Migrate old format: { endpoint, model } → { provider, model }
+    if (saved.llm && 'endpoint' in saved.llm && !('provider' in saved.llm)) {
+      const oldEndpoint: string = saved.llm.endpoint ?? '';
+      const { PROVIDERS } = await import('./settings/providers');
+      const matched = PROVIDERS.find((p) =>
+        oldEndpoint.startsWith(p.endpoint.replace(/\/+$/, ''))
+      );
+      saved.llm.provider = matched?.id ?? 'custom';
+      if (!matched) {
+        saved.llm.customEndpoint = oldEndpoint;
+        saved.llm.customModel = saved.llm.model ?? '';
+      }
+      delete saved.llm.endpoint;
+    }
+
     this.settings = {
       llm: { ...DEFAULT_SETTINGS.llm, ...saved.llm },
       feishu: { ...DEFAULT_SETTINGS.feishu, ...saved.feishu },
+      telegram: { ...DEFAULT_SETTINGS.telegram, ...saved.telegram },
+      imessage: { ...DEFAULT_SETTINGS.imessage, ...saved.imessage },
       agent: { ...DEFAULT_SETTINGS.agent, ...saved.agent },
     };
   }
@@ -101,8 +125,11 @@ export default class VaultChatPlugin extends Plugin {
     await this.saveData(this.settings);
     // Re-init agent when settings change (API key/endpoint/model may have changed)
     this.initAgent();
-    // Re-init Feishu when settings change (enabled/credentials may have changed)
-    await this.initFeishu();
+    // Re-init messaging channels when settings change
+    if (this.agentCore) {
+      const vaultName = this.app.vault.getName();
+      await this.channelRegistry.initAll(this.agentCore, this.settings, vaultName);
+    }
   }
 
   getAgentCore(): AgentCore | null {
@@ -111,6 +138,10 @@ export default class VaultChatPlugin extends Plugin {
 
   getLLMStatus(): StatusIndicator {
     return this.llmStatus;
+  }
+
+  getChannelStatus(id: string): ConnectionStatus {
+    return this.channelRegistry.getStatus(id);
   }
 
   async searchVault(query: string, limit = 10): Promise<SearchResult[]> {
@@ -150,59 +181,6 @@ export default class VaultChatPlugin extends Plugin {
     } else {
       this.llmStatus.setState('connected');
     }
-  }
-
-  /**
-   * Initialize Feishu bot on desktop when enabled.
-   * Uses dynamic import to avoid bundling Node.js deps on mobile.
-   */
-  async initFeishu(): Promise<void> {
-    // Disconnect existing bot if any
-    if (this.feishuBot) {
-      await this.feishuBot.disconnect();
-      this.feishuBot = null;
-    }
-
-    // Only run on desktop with Feishu enabled and credentials set
-    if (!Platform.isDesktop || !this.settings.feishu.enabled) {
-      return;
-    }
-
-    if (!this.settings.feishu.appId || !this.settings.feishu.appSecret) {
-      console.debug('Vault Chat: Feishu enabled but credentials not set');
-      return;
-    }
-
-    if (!this.agentCore) {
-      console.error('Vault Chat: Agent core not initialized, skipping Feishu');
-      return;
-    }
-
-    try {
-      const { FeishuBot } = await import('./feishu/feishu-bot');
-      const { FeishuHandler } = await import('./feishu/feishu-handler');
-
-      this.feishuBot = new FeishuBot({
-        appId: this.settings.feishu.appId,
-        appSecret: this.settings.feishu.appSecret,
-      });
-
-      const vaultName = this.app.vault.getName();
-      const handler = new FeishuHandler(this.agentCore, this.feishuBot, vaultName);
-      handler.start();
-
-      await this.feishuBot.connect();
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Unknown error';
-      console.error('Vault Chat: Failed to initialize Feishu bot:', msg);
-    }
-  }
-
-  getFeishuStatus(): FeishuConnectionStatus {
-    if (!this.feishuBot) {
-      return 'disconnected';
-    }
-    return this.feishuBot.getStatus();
   }
 
   private async buildIndex(): Promise<void> {

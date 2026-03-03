@@ -1,5 +1,6 @@
-import { App, Platform, PluginSettingTab, Setting } from 'obsidian';
+import { App, PluginSettingTab, Setting } from 'obsidian';
 import type VaultChatPlugin from '../main';
+import { PROVIDERS, getProvider, getDefaultModel } from './providers';
 
 export class VaultChatSettingTab extends PluginSettingTab {
   plugin: VaultChatPlugin;
@@ -13,47 +14,105 @@ export class VaultChatSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    // LLM Configuration
+    // ── LLM Configuration ──
     containerEl.createEl('h2', { text: 'LLM Configuration' });
 
+    // Provider dropdown
     new Setting(containerEl)
-      .setName('API Key')
-      .setDesc('Your LLM provider API key')
-      .addText((text) =>
-        text
-          .setPlaceholder('Enter your API key')
-          .setValue(this.plugin.settings.llm.apiKey)
-          .onChange(async (value) => {
-            this.plugin.settings.llm.apiKey = value;
-            await this.plugin.saveSettings();
-          })
-      );
+      .setName('Provider')
+      .setDesc('Select your LLM provider')
+      .addDropdown((dropdown) => {
+        for (const p of PROVIDERS) {
+          dropdown.addOption(p.id, p.name);
+        }
+        dropdown.addOption('custom', 'Custom (OpenAI-compatible)');
+        dropdown.setValue(this.plugin.settings.llm.provider);
+        dropdown.onChange(async (value) => {
+          this.plugin.settings.llm.provider = value;
+          // Set default model when switching providers
+          if (value !== 'custom') {
+            this.plugin.settings.llm.model = getDefaultModel(value);
+          }
+          await this.plugin.saveSettings();
+          this.display(); // Re-render to show/hide custom fields
+        });
+      });
 
-    new Setting(containerEl)
-      .setName('API Endpoint')
-      .setDesc('OpenAI-compatible API endpoint URL')
-      .addText((text) =>
-        text
-          .setPlaceholder('https://dashscope.aliyuncs.com/compatible-mode/v1')
-          .setValue(this.plugin.settings.llm.endpoint)
-          .onChange(async (value) => {
-            this.plugin.settings.llm.endpoint = value;
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName('Model')
-      .setDesc('Model name to use for chat completions')
-      .addText((text) =>
-        text
-          .setPlaceholder('qwen-plus')
-          .setValue(this.plugin.settings.llm.model)
-          .onChange(async (value) => {
+    // Model dropdown (for preset providers)
+    const provider = getProvider(this.plugin.settings.llm.provider);
+    if (provider) {
+      new Setting(containerEl)
+        .setName('Model')
+        .setDesc('Model to use for chat completions')
+        .addDropdown((dropdown) => {
+          for (const m of provider.models) {
+            dropdown.addOption(m, m);
+          }
+          dropdown.setValue(this.plugin.settings.llm.model);
+          dropdown.onChange(async (value) => {
             this.plugin.settings.llm.model = value;
             await this.plugin.saveSettings();
-          })
-      );
+          });
+        });
+    }
+
+    // Custom endpoint + model fields (only when provider is 'custom')
+    if (this.plugin.settings.llm.provider === 'custom') {
+      new Setting(containerEl)
+        .setName('API Endpoint')
+        .setDesc('OpenAI-compatible API endpoint URL (without /chat/completions)')
+        .addText((text) =>
+          text
+            .setPlaceholder('https://api.example.com/v1')
+            .setValue(this.plugin.settings.llm.customEndpoint)
+            .onChange(async (value) => {
+              this.plugin.settings.llm.customEndpoint = value;
+              await this.plugin.saveSettings();
+            })
+        );
+
+      new Setting(containerEl)
+        .setName('Model')
+        .setDesc('Model name to use for chat completions')
+        .addText((text) =>
+          text
+            .setPlaceholder('gpt-4')
+            .setValue(this.plugin.settings.llm.customModel)
+            .onChange(async (value) => {
+              this.plugin.settings.llm.customModel = value;
+              await this.plugin.saveSettings();
+            })
+        );
+    }
+
+    // API key with save button
+    const apiKeySetting = new Setting(containerEl)
+      .setName('API Key')
+      .setDesc('Your LLM provider API key');
+
+    apiKeySetting.addText((text) => {
+      text
+        .setPlaceholder('Enter your API key')
+        .setValue(this.plugin.settings.llm.apiKey);
+      text.inputEl.type = 'password';
+      // Save on blur instead of every keystroke
+      text.inputEl.addEventListener('change', async () => {
+        this.plugin.settings.llm.apiKey = text.getValue();
+        await this.plugin.saveSettings();
+      });
+    });
+
+    // "Get API key" link
+    if (provider) {
+      const linkSetting = new Setting(containerEl)
+        .setName('Get API Key')
+        .setDesc(`Get your ${provider.name} API key`);
+      const linkEl = linkSetting.descEl.createEl('a', {
+        text: provider.apiKeyUrl,
+        href: provider.apiKeyUrl,
+      });
+      linkEl.setAttr('target', '_blank');
+    }
 
     // Test LLM Connection button
     const testLLMSetting = new Setting(containerEl)
@@ -80,7 +139,7 @@ export class VaultChatSettingTab extends PluginSettingTab {
       })
     );
 
-    // Agent Configuration
+    // ── Agent Configuration ──
     containerEl.createEl('h2', { text: 'Agent Configuration' });
 
     new Setting(containerEl)
@@ -129,73 +188,63 @@ export class VaultChatSettingTab extends PluginSettingTab {
           })
       );
 
-    // Feishu Configuration — desktop only
-    if (Platform.isDesktop) {
-      containerEl.createEl('h2', { text: 'Feishu Integration' });
+    // ── Channel settings — rendered by the registry (desktop only) ──
+    this.plugin.channelRegistry.renderSettings(
+      containerEl,
+      this.plugin.settings,
+      async () => {
+        await this.plugin.saveSettings();
+      },
+      () => {
+        this.display();
+      }
+    );
 
-      // Connection status indicator
-      const status = this.plugin.getFeishuStatus();
-      const statusLabels: Record<string, string> = {
-        connected: 'Connected',
-        disconnected: 'Disconnected',
-        error: 'Error',
-      };
+    // ── Feishu Setup Guide (after channel settings) ──
+    this.renderFeishuGuide(containerEl);
+  }
 
-      const statusSetting = new Setting(containerEl)
-        .setName('Connection Status')
-        .setDesc(`Feishu bot is currently ${statusLabels[status] ?? 'unknown'}`);
-      statusSetting.descEl.createEl('span', {
-        cls: `vault-chat-status-dot vault-chat-status-${status}`,
-        text: ' \u25CF',
-      });
+  private renderFeishuGuide(containerEl: HTMLElement): void {
+    const details = containerEl.createEl('details', {
+      cls: 'vault-chat-setup-guide',
+    });
+    details.createEl('summary', { text: 'Feishu Bot Setup Guide' });
 
-      new Setting(containerEl)
-        .setName('Enable Feishu Bot')
-        .setDesc('Connect a Feishu bot to query your vault via DM')
-        .addToggle((toggle) =>
-          toggle
-            .setValue(this.plugin.settings.feishu.enabled)
-            .onChange(async (value) => {
-              this.plugin.settings.feishu.enabled = value;
-              await this.plugin.saveSettings();
-              // Re-render to update status
-              this.display();
-            })
-        );
-
-      new Setting(containerEl)
-        .setName('Feishu App ID')
-        .setDesc('Your Feishu app ID')
-        .addText((text) =>
-          text
-            .setPlaceholder('Enter Feishu App ID')
-            .setValue(this.plugin.settings.feishu.appId)
-            .onChange(async (value) => {
-              this.plugin.settings.feishu.appId = value;
-              await this.plugin.saveSettings();
-            })
-        );
-
-      new Setting(containerEl)
-        .setName('Feishu App Secret')
-        .setDesc('Your Feishu app secret')
-        .addText((text) =>
-          text
-            .setPlaceholder('Enter Feishu App Secret')
-            .setValue(this.plugin.settings.feishu.appSecret)
-            .onChange(async (value) => {
-              this.plugin.settings.feishu.appSecret = value;
-              await this.plugin.saveSettings();
-            })
-        );
+    const ol = details.createEl('ol');
+    const steps = [
+      'Go to open.feishu.cn and create a new app',
+      'Enable the "Bot" capability under Features',
+      'In "Event subscriptions", add: im.message.receive_v1',
+      'Set the subscription mode to "WebSocket" (no public URL needed)',
+      'Copy the App ID and App Secret into the Feishu settings above',
+      'Enable the toggle and the bot will connect automatically',
+    ];
+    for (const step of steps) {
+      ol.createEl('li', { text: step });
     }
   }
 
   private async testLLMConnection(): Promise<void> {
-    const { apiKey, endpoint, model } = this.plugin.settings.llm;
+    const { apiKey, provider, model, customEndpoint, customModel } =
+      this.plugin.settings.llm;
     if (!apiKey) {
       throw new Error('API key is not set');
     }
+
+    let endpoint: string;
+    let testModel: string;
+    if (provider === 'custom') {
+      endpoint = customEndpoint;
+      testModel = customModel;
+    } else {
+      endpoint = getProvider(provider)?.endpoint ?? '';
+      testModel = model;
+    }
+
+    if (!endpoint) {
+      throw new Error('API endpoint is not configured');
+    }
+
     const url = `${endpoint.replace(/\/+$/, '')}/chat/completions`;
     const response = await fetch(url, {
       method: 'POST',
@@ -204,7 +253,7 @@ export class VaultChatSettingTab extends PluginSettingTab {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model,
+        model: testModel,
         messages: [{ role: 'user', content: 'Hi' }],
         max_tokens: 1,
       }),
