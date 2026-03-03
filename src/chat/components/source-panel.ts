@@ -10,21 +10,20 @@ export class SourcePanel {
     onLinkClick: (filePath: string) => void,
     resolveLink: (linkText: string) => string | null
   ) {
-    this.containerEl = parentEl.createDiv({ cls: 'vault-chat-sources' });
+    this.containerEl = parentEl.createDiv({ cls: 'vault-chat-sources vault-chat-hidden' });
     this.onLinkClick = onLinkClick;
     this.resolveLinkFn = resolveLink;
-    this.containerEl.style.display = 'none';
   }
 
   update(text: string): void {
     const links = extractWikiLinks(text);
     if (links.length === 0) {
-      this.containerEl.style.display = 'none';
+      this.containerEl.classList.add('vault-chat-hidden');
       return;
     }
 
     this.containerEl.empty();
-    this.containerEl.style.display = 'block';
+    this.containerEl.classList.remove('vault-chat-hidden');
 
     const headerEl = this.containerEl.createDiv({ cls: 'vault-chat-sources-header' });
     headerEl.textContent = 'Sources';
@@ -51,6 +50,6 @@ export class SourcePanel {
 
   clear(): void {
     this.containerEl.empty();
-    this.containerEl.style.display = 'none';
+    this.containerEl.classList.add('vault-chat-hidden');
   }
 }

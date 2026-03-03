@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf } from 'obsidian';
+import { ItemView, TFile, WorkspaceLeaf } from 'obsidian';
 import type VaultChatPlugin from '../main';
 import type { AgentEvent, ChatMessage } from '../types';
 import { MessageList } from './components/message-list';
@@ -115,19 +115,13 @@ export class ChatView extends ItemView {
   }
 
   private updateStatusDot(state: ConnectionState): void {
-    const colors: Record<ConnectionState, string> = {
-      connected: '#4caf50',
-      connecting: '#ff9800',
-      disconnected: '#9e9e9e',
-      error: '#f44336',
-    };
     const titles: Record<ConnectionState, string> = {
       connected: 'LLM connected',
       connecting: 'Connecting to LLM...',
       disconnected: 'LLM not configured',
       error: 'LLM connection error',
     };
-    this.statusDotEl.style.color = colors[state];
+    this.statusDotEl.className = `vault-chat-status-dot vault-chat-status-${state}`;
     this.statusDotEl.textContent = '\u25CF ';
     this.statusDotEl.title = titles[state];
   }
@@ -269,7 +263,7 @@ export class ChatView extends ItemView {
   private async openFile(filePath: string): Promise<void> {
     const file = this.app.vault.getAbstractFileByPath(filePath);
     if (file) {
-      await this.app.workspace.getLeaf(false).openFile(file as any);
+      await this.app.workspace.getLeaf(false).openFile(file as TFile);
     }
   }
 }

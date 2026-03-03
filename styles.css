@@ -26,6 +26,34 @@
   line-height: 1;
 }
 
+.vault-chat-status-connected {
+  color: #4caf50;
+}
+
+.vault-chat-status-connecting {
+  color: #ff9800;
+}
+
+.vault-chat-status-disconnected {
+  color: #9e9e9e;
+}
+
+.vault-chat-status-error {
+  color: #f44336;
+}
+
+.vault-chat-hidden {
+  display: none;
+}
+
+.vault-chat-test-success {
+  color: #4caf50;
+}
+
+.vault-chat-test-error {
+  color: #f44336;
+}
+
 .vault-chat-header-title {
   font-weight: 600;
   font-size: 14px;

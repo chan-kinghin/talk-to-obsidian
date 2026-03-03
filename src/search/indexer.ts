@@ -28,7 +28,7 @@ export class VaultIndexer {
     const files = this.vault.getMarkdownFiles();
 
     if (files.length === 0) {
-      console.log('Vault Chat: No markdown files found in vault');
+      console.debug('Vault Chat: No markdown files found in vault');
       return 0;
     }
 
@@ -48,7 +48,7 @@ export class VaultIndexer {
     if (skipped > 0) {
       console.warn(`Vault Chat: Indexed ${indexed} files, skipped ${skipped} files due to errors`);
     } else {
-      console.log(`Vault Chat: Indexed ${indexed} files`);
+      console.debug(`Vault Chat: Indexed ${indexed} files`);
     }
 
     return indexed;

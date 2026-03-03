@@ -169,7 +169,7 @@ export default class VaultChatPlugin extends Plugin {
     }
 
     if (!this.settings.feishu.appId || !this.settings.feishu.appSecret) {
-      console.log('Vault Chat: Feishu enabled but credentials not set');
+      console.debug('Vault Chat: Feishu enabled but credentials not set');
       return;
     }
 
@@ -208,7 +208,7 @@ export default class VaultChatPlugin extends Plugin {
   private async buildIndex(): Promise<void> {
     try {
       const count = await this.indexer.buildFullIndex();
-      console.log(`Vault Chat: Index built with ${count} documents`);
+      console.debug(`Vault Chat: Index built with ${count} documents`);
 
       // Update chat view index status if open
       this.app.workspace.getLeavesOfType(VIEW_TYPE_VAULT_CHAT).forEach((leaf) => {

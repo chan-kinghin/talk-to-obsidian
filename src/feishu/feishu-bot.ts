@@ -106,7 +106,7 @@ export class FeishuBot {
       await (this.wsClient as { start: () => Promise<void> }).start();
 
       this.setStatus('connected');
-      console.log('Vault Chat: Feishu bot connected');
+      console.debug('Vault Chat: Feishu bot connected');
     } catch (e) {
       this.setStatus('error');
       const msg = e instanceof Error ? e.message : 'Unknown error';
@@ -130,7 +130,7 @@ export class FeishuBot {
     }
     this.larkClient = null;
     this.setStatus('disconnected');
-    console.log('Vault Chat: Feishu bot disconnected');
+    console.debug('Vault Chat: Feishu bot disconnected');
   }
 
   /**

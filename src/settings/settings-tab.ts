@@ -66,11 +66,13 @@ export class VaultChatSettingTab extends PluginSettingTab {
         try {
           await this.testLLMConnection();
           testLLMSetting.setDesc('Connection successful!');
-          testLLMSetting.descEl.style.color = '#4caf50';
+          testLLMSetting.descEl.classList.add('vault-chat-test-success');
+          testLLMSetting.descEl.classList.remove('vault-chat-test-error');
         } catch (e) {
           const msg = e instanceof Error ? e.message : 'Unknown error';
           testLLMSetting.setDesc(`Connection failed: ${msg}`);
-          testLLMSetting.descEl.style.color = '#f44336';
+          testLLMSetting.descEl.classList.add('vault-chat-test-error');
+          testLLMSetting.descEl.classList.remove('vault-chat-test-success');
         } finally {
           btn.setButtonText('Test');
           btn.setDisabled(false);
@@ -138,19 +140,14 @@ export class VaultChatSettingTab extends PluginSettingTab {
         disconnected: 'Disconnected',
         error: 'Error',
       };
-      const statusColors: Record<string, string> = {
-        connected: '#4caf50',
-        disconnected: '#9e9e9e',
-        error: '#f44336',
-      };
 
       const statusSetting = new Setting(containerEl)
         .setName('Connection Status')
         .setDesc(`Feishu bot is currently ${statusLabels[status] ?? 'unknown'}`);
-      const statusDot = statusSetting.descEl.createEl('span', {
+      statusSetting.descEl.createEl('span', {
+        cls: `vault-chat-status-dot vault-chat-status-${status}`,
         text: ' \u25CF',
       });
-      statusDot.style.color = statusColors[status] ?? '#9e9e9e';
 
       new Setting(containerEl)
         .setName('Enable Feishu Bot')
