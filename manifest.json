@@ -1,0 +1,9 @@
+{
+  "id": "vault-chat",
+  "name": "Vault Chat",
+  "version": "1.0.0",
+  "minAppVersion": "1.0.0",
+  "description": "Chat with your Obsidian vault via an agentic AI",
+  "author": "kinghinchan",
+  "isDesktopOnly": false
+}

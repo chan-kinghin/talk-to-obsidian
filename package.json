@@ -1,0 +1,24 @@
+{
+  "name": "obsidian-vault-chat",
+  "version": "1.0.0",
+  "description": "Chat with your Obsidian vault via an agentic AI",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "node esbuild.config.mjs production"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@larksuiteoapi/node-sdk": "^1.59.0",
+    "@orama/orama": "^3.1.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "builtin-modules": "^4.0.0",
+    "esbuild": "^0.25.2",
+    "obsidian": "latest",
+    "typescript": "^5.8.3"
+  }
+}
